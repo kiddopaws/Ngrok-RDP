@@ -1,4 +1,4 @@
-name: RDP Ngrok (Asia Pacific) Fix
+name: RDP Ngrok (Asia Pacific) Fix Final
 
 on: workflow_dispatch
 
@@ -12,7 +12,6 @@ jobs:
       run: |
         Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip
-        # PERBAIKAN: Menggunakan syntax v2 (tanpa 'config add-')
         .\ngrok\ngrok.exe authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
     - name: Aktifkan RDP (Registry Fix)
@@ -28,11 +27,17 @@ jobs:
 
     - name: Buat User & Password
       run: |
-        $password = "SkyroPass123!" 
+        # Password diganti agar tidak mengandung nama user "Skyro"
+        $password = "LaptopBaru@2026!" 
         $user = "Skyro"
+        
+        # Membuat user baru
         net user $user $password /add
+        
+        # Menjadikan user sebagai Admin
         net localgroup administrators $user /add
         
+        # Simpan info ke environment variable agar bisa dibaca step berikutnya
         echo "USER_NAME=$user" >> $env:GITHUB_ENV
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
@@ -56,6 +61,7 @@ jobs:
         Write-Host "Username   : $env:USER_NAME"
         Write-Host "Password   : $env:USER_PASS"
         Write-Host "============================================="
+        Write-Host "PENTING: Gunakan username & password di atas!"
 
     - name: Jangan Matikan (Loop)
       run: |
