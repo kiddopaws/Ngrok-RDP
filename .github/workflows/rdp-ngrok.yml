@@ -1,4 +1,4 @@
-name: RDP Pinggy (Final & Stabil)
+name: RDP Pinggy (Mobile Friendly)
 
 on: workflow_dispatch
 
@@ -21,64 +21,68 @@ jobs:
         $user = "Skyro"
         net user $user $password /add /y
         net localgroup administrators $user /add
-        
-        # Simpan password ke env agar bisa dipanggil nanti
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
-        Write-Host "User $user berhasil dibuat."
+        Write-Host "User berhasil dibuat."
 
-    - name: 3. Jalankan Tunnel (Pinggy)
+    - name: 3. Jalankan Tunnel (Mode Paksa TTY)
       run: |
-        Write-Host "Memulai Pinggy di background..."
+        Write-Host "Menghubungkan ke Pinggy..."
         
-        # FIX: Memisahkan file log output dan error agar tidak crash
-        $args = "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io"
+        # Tambahkan flag '-tt' untuk memaksa TTY (supaya banner URL keluar)
+        # Output dan Error dipisah ke dua file berbeda agar tidak crash
+        $args = "-tt -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io"
         
         Start-Process -FilePath "ssh" -ArgumentList $args -RedirectStandardOutput "pinggy-out.log" -RedirectStandardError "pinggy-err.log" -NoNewWindow
         
-        Write-Host "Pinggy berjalan. Menunggu URL muncul..."
+        Write-Host "Pinggy berjalan di background. Sedang menunggu URL..."
 
-    - name: 4. CEK URL & TAMPILKAN
+    - name: 4. CEK URL (Scan Semua Log)
       run: |
         $urlFound = $false
         $attempts = 0
         
-        # Loop selama 60 detik untuk mencari URL di dalam file log
+        # Loop 30 kali (total 60 detik)
         while ($attempts -lt 30) {
             Start-Sleep -Seconds 2
             $attempts++
             
-            if (Test-Path "pinggy-out.log") {
-                # Baca log
-                $log = Get-Content "pinggy-out.log" | Out-String
+            # Gabungkan isi kedua log (Output & Error) untuk diperiksa
+            $logContent = ""
+            if (Test-Path "pinggy-out.log") { $logContent += Get-Content "pinggy-out.log" | Out-String }
+            if (Test-Path "pinggy-err.log") { $logContent += Get-Content "pinggy-err.log" | Out-String }
+            
+            # Cari teks dengan format tcp://...
+            if ($logContent -match "tcp://(r.pinggy.io:[0-9]+)") {
+                $rawUrl = $matches[0]
+                $cleanUrl = $matches[1] # Ambil yang tanpa tcp://
                 
-                # Cari pola tcp://...
-                if ($log -match "tcp://(r.pinggy.io:[0-9]+)") {
-                    $rawUrl = $matches[0]
-                    $cleanUrl = $matches[1] # Ini yang tanpa tcp://
-                    
-                    Write-Host "=============================================" -ForegroundColor Green
-                    Write-Host "       RDP BERHASIL KONEK!                   " -ForegroundColor Green
-                    Write-Host "=============================================" -ForegroundColor Green
-                    Write-Host "Address  : $cleanUrl" -ForegroundColor Yellow
-                    Write-Host "Username : Skyro"
-                    Write-Host "Password : $env:USER_PASS"
-                    Write-Host "=============================================" -ForegroundColor Green
-                    Write-Host "TIPS HP: Masukkan Address '$cleanUrl' (TANPA tcp://)"
-                    
-                    $urlFound = $true
-                    break
-                }
+                Write-Host "=============================================" -ForegroundColor Green
+                Write-Host "       ✅ RDP BERHASIL KONEK!                " -ForegroundColor Green
+                Write-Host "=============================================" -ForegroundColor Green
+                Write-Host "Address  : $cleanUrl" -ForegroundColor Yellow
+                Write-Host "Username : Skyro"
+                Write-Host "Password : $env:USER_PASS"
+                Write-Host "=============================================" -ForegroundColor Green
+                Write-Host "CARA PAKAI DI HP:"
+                Write-Host "1. Buka RD Client"
+                Write-Host "2. PC Name isi: $cleanUrl"
+                Write-Host "3. User Account: Add User > Skyro / $env:USER_PASS"
+                
+                $urlFound = $true
+                break
             }
         }
         
-        # Jika gagal, tampilkan error log untuk diagnosa
+        # Jika setelah 60 detik tidak ketemu juga, tampilkan log-nya biar tahu kenapa
         if (-not $urlFound) {
-            Write-Error "Gagal mendapatkan URL. Cek error log di bawah:"
+            Write-Error "❌ Gagal mendapatkan URL. Lihat detail error di bawah:"
+            Write-Host "---------------- ISI LOG ERROR ----------------"
             if (Test-Path "pinggy-err.log") { Get-Content "pinggy-err.log" }
+            Write-Host "---------------- ISI LOG OUTPUT ---------------"
             if (Test-Path "pinggy-out.log") { Get-Content "pinggy-out.log" }
             exit 1
         }
 
-    - name: 5. Loop (Jangan Matikan)
+    - name: 5. Loop (Jaga Tetap Hidup)
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
