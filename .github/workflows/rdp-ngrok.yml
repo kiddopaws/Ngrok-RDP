@@ -1,11 +1,11 @@
-name: RDP Ngrok (Working 100%)
+name: RDP Ngrok (Anti-AFK 6 Jam)
 
 on: workflow_dispatch
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 9999
+    timeout-minutes: 360 # Ini settingan kunci: Maksimal 360 menit (6 jam)
 
     steps:
     - name: 1. Bersihkan Sesi (Mode Aman)
@@ -22,11 +22,19 @@ jobs:
       run: |
         .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
-    - name: 4. Aktifkan RDP
+    - name: 4. Aktifkan RDP & Cegah Sleep
       run: |
+        # Aktifkan RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        
+        # Setting agar Windows tidak pernah Sleep/Mati Layar
+        powercfg /change monitor-timeout-ac 0
+        powercfg /change disk-timeout-ac 0
+        powercfg /change standby-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
+        Write-Host "Anti-Sleep berhasil diaktifkan."
 
     - name: 5. Jalankan Ngrok
       run: |
@@ -70,17 +78,27 @@ jobs:
         echo "USER_NAME=$user" >> $env:GITHUB_ENV
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
-    - name: 🚀 INFO KONEKSI FINAL
+    - name: 🚀 INFO KONEKSI
       run: |
-        # Saya menyederhanakan bagian ini agar tidak error syntax lagi
         Write-Host "============================================="
-        Write-Host "       RDP BERHASIL ONLINE!                  "
+        Write-Host "       RDP SIAP (TARGET: 6 JAM MAX)          "
         Write-Host "============================================="
         Write-Host "Address  : $env:RDP_ADDRESS"
         Write-Host "Username : $env:USER_NAME"
         Write-Host "Password : $env:USER_PASS"
         Write-Host "============================================="
 
-    - name: 8. Loop (Jangan Mati)
+    - name: 8. Loop Anti-AFK (Jaga Tetap Hidup)
       run: |
-        while ($true) { Start-Sleep -Seconds 300 }
+        $menit = 0
+        # Loop selama 360 kali (360 menit = 6 jam)
+        while ($menit -lt 360) { 
+            $menit++
+            # Kirim sinyal log agar GitHub tahu kita masih aktif
+            Write-Host "Sesi Aktif... Menit ke-$menit dari 360." 
+            
+            # Gerakkan tombol virtual (opsional, untuk mencegah idle deep sleep)
+            # Tidur selama 60 detik (1 menit)
+            Start-Sleep -Seconds 60 
+        }
+        Write-Host "Waktu Habis! Sesi 6 Jam Selesai."
