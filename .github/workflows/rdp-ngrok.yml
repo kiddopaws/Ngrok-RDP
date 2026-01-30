@@ -1,4 +1,4 @@
-name: RDP Pinggy (Anti-Blokir)
+name: RDP Pinggy (Fix Log)
 
 on: workflow_dispatch
 
@@ -22,14 +22,52 @@ jobs:
         net localgroup administrators $user /add
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
-    - name: 🚀 JALANKAN TUNNEL (Tunggu Link Muncul)
+    - name: 🚀 JALANKAN TUNNEL & TAMPILKAN URL
       run: |
-        Write-Host "Sedang meminta link public dari Pinggy..."
+        Write-Host "Memulai Pinggy di background..."
         
-        # Menggunakan SSH Tunneling ke Pinggy (Mode TCP)
-        # Output akan langsung muncul di log
-        ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@a.pinggy.io 
+        # Jalankan SSH di background (Start-Process) agar tidak memblokir script
+        # Output disimpan ke file pinggy.log
+        $proc = Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io" -RedirectStandardOutput "pinggy.log" -RedirectStandardError "pinggy.log" -PassThru -NoNewWindow
+        
+        # Loop untuk membaca file log sampai URL ditemukan
+        $urlFound = $false
+        $attempts = 0
+        
+        while ($attempts -lt 30) {
+            Start-Sleep -Seconds 2
+            $attempts++
+            
+            if (Test-Path "pinggy.log") {
+                # Baca isi log
+                $log = Get-Content "pinggy.log" | Out-String
+                
+                # Cari pola URL (tcp://...)
+                if ($log -match "tcp://(r.pinggy.io:[0-9]+)") {
+                    $url = $matches[1]
+                    
+                    Write-Host "=============================================" -ForegroundColor Green
+                    Write-Host "       RDP SIAP DIGUNAKAN! (PINGGY)          " -ForegroundColor Green
+                    Write-Host "=============================================" -ForegroundColor Green
+                    Write-Host "Address  : $url" -ForegroundColor Yellow
+                    Write-Host "Username : Skyro"
+                    Write-Host "Password : $env:USER_PASS"
+                    Write-Host "=============================================" -ForegroundColor Green
+                    
+                    # Simpan URL ke env agar bisa dipakai (opsional)
+                    echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
+                    $urlFound = $true
+                    break
+                }
+            }
+        }
+        
+        if (-not $urlFound) {
+            Write-Error "Timeout! URL tidak muncul dalam 60 detik. Cek log di bawah:"
+            if (Test-Path "pinggy.log") { Get-Content "pinggy.log" }
+            exit 1
+        }
 
-    - name: Loop
+    - name: Loop (Jangan Mati)
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
