@@ -1,4 +1,4 @@
-name: RDP Pinggy (Fix Log)
+name: RDP Pinggy (Final & Stabil)
 
 on: workflow_dispatch
 
@@ -8,66 +8,77 @@ jobs:
     timeout-minutes: 9999
 
     steps:
-    - name: Aktifkan RDP
+    - name: 1. Aktifkan RDP & Firewall
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Write-Host "RDP Enabled."
 
-    - name: Buat User & Password
+    - name: 2. Buat User & Password
       run: |
         $password = "KopiHitam@99"
         $user = "Skyro"
         net user $user $password /add /y
         net localgroup administrators $user /add
+        
+        # Simpan password ke env agar bisa dipanggil nanti
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
+        Write-Host "User $user berhasil dibuat."
 
-    - name: 🚀 JALANKAN TUNNEL & TAMPILKAN URL
+    - name: 3. Jalankan Tunnel (Pinggy)
       run: |
         Write-Host "Memulai Pinggy di background..."
         
-        # Jalankan SSH di background (Start-Process) agar tidak memblokir script
-        # Output disimpan ke file pinggy.log
-        $proc = Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io" -RedirectStandardOutput "pinggy.log" -RedirectStandardError "pinggy.log" -PassThru -NoNewWindow
+        # FIX: Memisahkan file log output dan error agar tidak crash
+        $args = "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io"
         
-        # Loop untuk membaca file log sampai URL ditemukan
+        Start-Process -FilePath "ssh" -ArgumentList $args -RedirectStandardOutput "pinggy-out.log" -RedirectStandardError "pinggy-err.log" -NoNewWindow
+        
+        Write-Host "Pinggy berjalan. Menunggu URL muncul..."
+
+    - name: 4. CEK URL & TAMPILKAN
+      run: |
         $urlFound = $false
         $attempts = 0
         
+        # Loop selama 60 detik untuk mencari URL di dalam file log
         while ($attempts -lt 30) {
             Start-Sleep -Seconds 2
             $attempts++
             
-            if (Test-Path "pinggy.log") {
-                # Baca isi log
-                $log = Get-Content "pinggy.log" | Out-String
+            if (Test-Path "pinggy-out.log") {
+                # Baca log
+                $log = Get-Content "pinggy-out.log" | Out-String
                 
-                # Cari pola URL (tcp://...)
+                # Cari pola tcp://...
                 if ($log -match "tcp://(r.pinggy.io:[0-9]+)") {
-                    $url = $matches[1]
+                    $rawUrl = $matches[0]
+                    $cleanUrl = $matches[1] # Ini yang tanpa tcp://
                     
                     Write-Host "=============================================" -ForegroundColor Green
-                    Write-Host "       RDP SIAP DIGUNAKAN! (PINGGY)          " -ForegroundColor Green
+                    Write-Host "       RDP BERHASIL KONEK!                   " -ForegroundColor Green
                     Write-Host "=============================================" -ForegroundColor Green
-                    Write-Host "Address  : $url" -ForegroundColor Yellow
+                    Write-Host "Address  : $cleanUrl" -ForegroundColor Yellow
                     Write-Host "Username : Skyro"
                     Write-Host "Password : $env:USER_PASS"
                     Write-Host "=============================================" -ForegroundColor Green
+                    Write-Host "TIPS HP: Masukkan Address '$cleanUrl' (TANPA tcp://)"
                     
-                    # Simpan URL ke env agar bisa dipakai (opsional)
-                    echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
                     $urlFound = $true
                     break
                 }
             }
         }
         
+        # Jika gagal, tampilkan error log untuk diagnosa
         if (-not $urlFound) {
-            Write-Error "Timeout! URL tidak muncul dalam 60 detik. Cek log di bawah:"
-            if (Test-Path "pinggy.log") { Get-Content "pinggy.log" }
+            Write-Error "Gagal mendapatkan URL. Cek error log di bawah:"
+            if (Test-Path "pinggy-err.log") { Get-Content "pinggy-err.log" }
+            if (Test-Path "pinggy-out.log") { Get-Content "pinggy-out.log" }
             exit 1
         }
 
-    - name: Loop (Jangan Mati)
+    - name: 5. Loop (Jangan Matikan)
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
