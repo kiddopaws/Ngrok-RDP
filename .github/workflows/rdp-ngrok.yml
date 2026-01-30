@@ -1,4 +1,4 @@
-name: RDP Ngrok V3 (DEBUG MODE FIX)
+name: RDP Ngrok (Ultra Fix)
 
 on: workflow_dispatch
 
@@ -10,9 +10,26 @@ jobs:
     steps:
     - name: Download Ngrok V3
       run: |
+        # Download & Ekstrak
         Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip -DestinationPath .
-        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        
+        # Validasi File
+        if (-not (Test-Path "ngrok.exe")) {
+            Write-Error "File ngrok.exe tidak ditemukan setelah ekstrak!"
+            exit 1
+        }
+
+    - name: Konfigurasi Token (Auto-Clean)
+      env:
+        RAW_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      run: |
+        # Membersihkan Token dari spasi atau tulisan 'ngrok authtoken' jika user salah copy
+        $cleanToken = $env:RAW_TOKEN -replace "ngrok config add-authtoken ", "" -replace "ngrok authtoken ", "" -replace " ", ""
+        
+        # Simpan token
+        .\ngrok.exe config add-authtoken $cleanToken
+        Write-Host "Token berhasil dikonfigurasi."
 
     - name: Aktifkan RDP
       run: |
@@ -20,37 +37,36 @@ jobs:
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-    - name: Buat Tunnel Ngrok (Log Terpisah)
+    - name: Jalankan Ngrok (Debug Mode)
       run: |
-        # FIX: Memisahkan file output dan error agar tidak crash
-        Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp", "3389" -RedirectStandardOutput "ngrok_out.log" -RedirectStandardError "ngrok_err.log" -NoNewWindow
+        # Jalankan Ngrok dan simpan log ke file terpisah
+        $ngrokPath = "$PWD\ngrok.exe"
+        Start-Process -FilePath $ngrokPath -ArgumentList "tcp", "3389" -RedirectStandardOutput "ngrok_out.log" -RedirectStandardError "ngrok_err.log" -NoNewWindow
         
-        Write-Host "Ngrok sedang berjalan... Tunggu 15 detik..."
+        Write-Host "Ngrok sedang mencoba koneksi... (Tunggu 15 detik)"
         Start-Sleep -Seconds 15
 
     - name: Cek Status & Ambil URL
       run: |
+        # Cek apakah ada error di log
+        if (Test-Path ngrok_err.log) {
+            $errContent = Get-Content ngrok_err.log
+            if ($errContent) {
+                Write-Host "⚠️ DITEMUKAN ERROR LOG NGROK:" -ForegroundColor Yellow
+                Write-Host $errContent -ForegroundColor Red
+            }
+        }
+
         try {
-            # Coba ambil data dari API Ngrok
             $response = Invoke-RestMethod http://localhost:4040/api/tunnels -ErrorAction Stop
-            
-            # Jika berhasil, ambil URL-nya
             $url = $response.tunnels[0].public_url
             $url = $url -replace "tcp://", ""
             echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
-            Write-Host "Sukses! URL didapatkan: $url"
+            Write-Host "✅ SUKSES! URL: $url" -ForegroundColor Green
         } catch {
-            # JIKA GAGAL, TAMPILKAN ISI LOG NGROK
-            Write-Error "GAGAL: Ngrok mati atau menolak koneksi. Lihat alasannya di bawah ini:"
-            
-            Write-Host "========== LOG ERROR (PENTING) =========="
-            if (Test-Path ngrok_err.log) { Get-Content ngrok_err.log }
-            Write-Host "========================================="
-            
-            Write-Host "========== LOG OUTPUT =========="
+            Write-Error "❌ GAGAL KONEK. Ngrok tidak berjalan atau Token bermasalah."
+            Write-Host "Cek Log Output di bawah ini:"
             if (Test-Path ngrok_out.log) { Get-Content ngrok_out.log }
-            Write-Host "================================"
-            
             exit 1
         }
 
@@ -66,13 +82,13 @@ jobs:
     - name: 🚀 INFO LOGIN RDP
       run: |
         Write-Host "============================================="
-        Write-Host "       RDP SIAP (Debug Mode)                 "
+        Write-Host "       RDP SIAP DIGUNAKAN!                   "
         Write-Host "============================================="
         Write-Host "IP Address : $env:RDP_ADDRESS"
         Write-Host "Username   : $env:USER_NAME"
         Write-Host "Password   : $env:USER_PASS"
         Write-Host "============================================="
 
-    - name: Loop
+    - name: Loop (Jangan Mati)
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
