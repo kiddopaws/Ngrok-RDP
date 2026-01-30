@@ -1,0 +1,72 @@
+name: RDP Ngrok (Asia Pacific)
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 9999
+
+    steps:
+    - name: Download Ngrok & Konfigurasi
+      run: |
+        Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip
+        .\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: Aktifkan RDP (Registry Fix)
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+
+    - name: Buat Tunnel Ngrok (Region AP - Singapore)
+      run: |
+        # Menggunakan region 'ap' (Asia Pacific) untuk routing yang lebih cepat dari Indonesia
+        Start-Process -FilePath ".\ngrok\ngrok.exe" -ArgumentList "tcp --region ap 3389" -NoNewWindow
+        
+        # Tunggu 10 detik agar tunnel terkoneksi
+        Start-Sleep -Seconds 10
+
+    - name: Buat User & Password
+      run: |
+        $password = "SkyroPass123!" 
+        # Password sengaja dibuat statis agar mudah diingat. 
+        # Kalau mau ganti, ubah tulisan di atas.
+        
+        $user = "Skyro"
+        net user $user $password /add
+        net localgroup administrators $user /add
+        
+        echo "USER_NAME=$user" >> $env:GITHUB_ENV
+        echo "USER_PASS=$password" >> $env:GITHUB_ENV
+
+    - name: Ambil Info Koneksi
+      run: |
+        # Mengambil URL Public dari API local Ngrok
+        try {
+            $response = Invoke-RestMethod http://localhost:4040/api/tunnels
+            $url = $response.tunnels[0].public_url
+            $url = $url -replace "tcp://", ""
+            echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
+        } catch {
+            Write-Error "Gagal mengambil URL. Pastikan Token Ngrok benar."
+        }
+
+    - name: 🚀 INFO LOGIN RDP
+      run: |
+        Write-Host "============================================="
+        Write-Host "       RDP SIAP (Server US - Route Asia)     "
+        Write-Host "============================================="
+        Write-Host "IP Address : $env:RDP_ADDRESS"
+        Write-Host "Username   : $env:USER_NAME"
+        Write-Host "Password   : $env:USER_PASS"
+        Write-Host "============================================="
+        Write-Host "Jangan lupa setting RDP Client ke 16-bit color!"
+
+    - name: Jangan Matikan (Loop)
+      run: |
+        # Loop agar runner tetap hidup
+        while ($true) {
+            Start-Sleep -Seconds 300
+        }
