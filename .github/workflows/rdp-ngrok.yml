@@ -1,4 +1,4 @@
-name: RDP Ngrok (Asia Pacific)
+name: RDP Ngrok (Asia Pacific) Fix
 
 on: workflow_dispatch
 
@@ -12,7 +12,8 @@ jobs:
       run: |
         Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip
-        .\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        # PERBAIKAN: Menggunakan syntax v2 (tanpa 'config add-')
+        .\ngrok\ngrok.exe authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
     - name: Aktifkan RDP (Registry Fix)
       run: |
@@ -22,18 +23,12 @@ jobs:
 
     - name: Buat Tunnel Ngrok (Region AP - Singapore)
       run: |
-        # Menggunakan region 'ap' (Asia Pacific) untuk routing yang lebih cepat dari Indonesia
         Start-Process -FilePath ".\ngrok\ngrok.exe" -ArgumentList "tcp --region ap 3389" -NoNewWindow
-        
-        # Tunggu 10 detik agar tunnel terkoneksi
         Start-Sleep -Seconds 10
 
     - name: Buat User & Password
       run: |
         $password = "SkyroPass123!" 
-        # Password sengaja dibuat statis agar mudah diingat. 
-        # Kalau mau ganti, ubah tulisan di atas.
-        
         $user = "Skyro"
         net user $user $password /add
         net localgroup administrators $user /add
@@ -43,7 +38,6 @@ jobs:
 
     - name: Ambil Info Koneksi
       run: |
-        # Mengambil URL Public dari API local Ngrok
         try {
             $response = Invoke-RestMethod http://localhost:4040/api/tunnels
             $url = $response.tunnels[0].public_url
@@ -62,11 +56,9 @@ jobs:
         Write-Host "Username   : $env:USER_NAME"
         Write-Host "Password   : $env:USER_PASS"
         Write-Host "============================================="
-        Write-Host "Jangan lupa setting RDP Client ke 16-bit color!"
 
     - name: Jangan Matikan (Loop)
       run: |
-        # Loop agar runner tetap hidup
         while ($true) {
             Start-Sleep -Seconds 300
         }
