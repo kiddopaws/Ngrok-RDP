@@ -1,4 +1,4 @@
-name: RDP Pinggy (Mobile Friendly)
+name: RDP Ngrok (API Method - Final)
 
 on: workflow_dispatch
 
@@ -8,81 +8,90 @@ jobs:
     timeout-minutes: 9999
 
     steps:
-    - name: 1. Aktifkan RDP & Firewall
+    - name: 1. Bersihkan Sesi Lama
+      run: |
+        # Mematikan proses ngrok jika ada yang nyangkut dari run sebelumnya
+        taskkill /f /im ngrok.exe 2>$null || echo "Bersih, tidak ada ngrok berjalan."
+
+    - name: 2. Download & Install Ngrok
+      run: |
+        # Menggunakan Chocolatey (Package Manager resmi Windows) agar instalasi rapi
+        choco install ngrok --no-progress --force
+        
+    - name: 3. Masukkan Token
+      run: |
+        # Konfigurasi token
+        ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: 4. Aktifkan RDP
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Write-Host "RDP Enabled."
 
-    - name: 2. Buat User & Password
+    - name: 5. Jalankan Ngrok (Background)
+      run: |
+        # Jalankan Ngrok tanpa ribet log file. Biarkan dia jalan di background.
+        # Kita tidak perlu membaca output teks-nya.
+        Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389" -WindowStyle Hidden
+        
+        Write-Host "Ngrok sedang start... Tunggu 10 detik..."
+        Start-Sleep -Seconds 10
+
+    - name: 6. AMBIL URL VIA API (Anti Gagal)
+      run: |
+        $url = $null
+        $attempt = 0
+        
+        # Coba minta URL ke API Ngrok sampai 20 kali (total 40 detik)
+        while ($attempt -lt 20) {
+            try {
+                # Ini adalah kuncinya: Kita tanya langsung ke localhost:4040
+                $response = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction Stop
+                
+                # Cek apakah tunnel sudah terbentuk
+                if ($response.tunnels.Count -gt 0) {
+                    $rawUrl = $response.tunnels[0].public_url
+                    # Hapus awalan tcp:// biar siap pakai di HP
+                    $url = $rawUrl -replace "tcp://", ""
+                    break
+                }
+            } catch {
+                # Jika belum siap, diam dulu
+                Write-Host "Menunggu tunnel siap..."
+            }
+            Start-Sleep -Seconds 2
+            $attempt++
+        }
+
+        if ($url) {
+            echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
+            Write-Host "✅ SUKSES! URL DITEMUKAN." -ForegroundColor Green
+        } else {
+            Write-Error "❌ Gagal. Kemungkinan Token Salah atau Akun Ngrok limit (Hapus sesi di dashboard Ngrok)."
+            exit 1
+        }
+
+    - name: 7. Buat User & Password
       run: |
         $password = "KopiHitam@99"
         $user = "Skyro"
         net user $user $password /add /y
         net localgroup administrators $user /add
+        echo "USER_NAME=$user" >> $env:GITHUB_ENV
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
-        Write-Host "User berhasil dibuat."
 
-    - name: 3. Jalankan Tunnel (Mode Paksa TTY)
+    - name: 🚀 INFO KONEKSI (Screenshot Ini)
       run: |
-        Write-Host "Menghubungkan ke Pinggy..."
-        
-        # Tambahkan flag '-tt' untuk memaksa TTY (supaya banner URL keluar)
-        # Output dan Error dipisah ke dua file berbeda agar tidak crash
-        $args = "-tt -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -p 443 -R0:localhost:3389 tcp@a.pinggy.io"
-        
-        Start-Process -FilePath "ssh" -ArgumentList $args -RedirectStandardOutput "pinggy-out.log" -RedirectStandardError "pinggy-err.log" -NoNewWindow
-        
-        Write-Host "Pinggy berjalan di background. Sedang menunggu URL..."
+        Write-Host "=============================================" -ForegroundColor Green
+        Write-Host "       RDP BERHASIL ONLINE                   " -ForegroundColor Green
+        Write-Host "=============================================" -ForegroundColor Green
+        Write-Host "Address  : $env:RDP_ADDRESS" -ForegroundColor Yellow
+        Write-Host "Username : $env:USER_NAME"
+        Write-Host "Password : $env:USER_PASS"
+        Write-Host "=============================================" -ForegroundColor Green
+        Write-Host "Masukkan Address (angka & huruf kuning) ke HP."
 
-    - name: 4. CEK URL (Scan Semua Log)
-      run: |
-        $urlFound = $false
-        $attempts = 0
-        
-        # Loop 30 kali (total 60 detik)
-        while ($attempts -lt 30) {
-            Start-Sleep -Seconds 2
-            $attempts++
-            
-            # Gabungkan isi kedua log (Output & Error) untuk diperiksa
-            $logContent = ""
-            if (Test-Path "pinggy-out.log") { $logContent += Get-Content "pinggy-out.log" | Out-String }
-            if (Test-Path "pinggy-err.log") { $logContent += Get-Content "pinggy-err.log" | Out-String }
-            
-            # Cari teks dengan format tcp://...
-            if ($logContent -match "tcp://(r.pinggy.io:[0-9]+)") {
-                $rawUrl = $matches[0]
-                $cleanUrl = $matches[1] # Ambil yang tanpa tcp://
-                
-                Write-Host "=============================================" -ForegroundColor Green
-                Write-Host "       ✅ RDP BERHASIL KONEK!                " -ForegroundColor Green
-                Write-Host "=============================================" -ForegroundColor Green
-                Write-Host "Address  : $cleanUrl" -ForegroundColor Yellow
-                Write-Host "Username : Skyro"
-                Write-Host "Password : $env:USER_PASS"
-                Write-Host "=============================================" -ForegroundColor Green
-                Write-Host "CARA PAKAI DI HP:"
-                Write-Host "1. Buka RD Client"
-                Write-Host "2. PC Name isi: $cleanUrl"
-                Write-Host "3. User Account: Add User > Skyro / $env:USER_PASS"
-                
-                $urlFound = $true
-                break
-            }
-        }
-        
-        # Jika setelah 60 detik tidak ketemu juga, tampilkan log-nya biar tahu kenapa
-        if (-not $urlFound) {
-            Write-Error "❌ Gagal mendapatkan URL. Lihat detail error di bawah:"
-            Write-Host "---------------- ISI LOG ERROR ----------------"
-            if (Test-Path "pinggy-err.log") { Get-Content "pinggy-err.log" }
-            Write-Host "---------------- ISI LOG OUTPUT ---------------"
-            if (Test-Path "pinggy-out.log") { Get-Content "pinggy-out.log" }
-            exit 1
-        }
-
-    - name: 5. Loop (Jaga Tetap Hidup)
+    - name: 8. Loop (Jangan Mati)
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
