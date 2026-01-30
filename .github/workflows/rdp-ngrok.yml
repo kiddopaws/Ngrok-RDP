@@ -1,4 +1,4 @@
-name: RDP Ngrok (Asia Pacific) Fix Final
+name: RDP Ngrok (Asia Pacific) Fix Final 2
 
 on: workflow_dispatch
 
@@ -25,19 +25,18 @@ jobs:
         Start-Process -FilePath ".\ngrok\ngrok.exe" -ArgumentList "tcp --region ap 3389" -NoNewWindow
         Start-Sleep -Seconds 10
 
-    - name: Buat User & Password
+    - name: Buat User & Password (FIXED)
       run: |
-        # Password diganti agar tidak mengandung nama user "Skyro"
-        $password = "LaptopBaru@2026!" 
+        # Password dipendekkan menjadi 12 karakter agar tidak muncul peringatan "Too Long"
+        # Password ini (KopiHitam@99) punya Huruf Besar, Kecil, Angka, & Simbol.
+        $password = "KopiHitam@99" 
         $user = "Skyro"
         
-        # Membuat user baru
-        net user $user $password /add
+        # /add /y memaksa 'yes' jika ada prompt konfirmasi lain
+        net user $user $password /add /y
         
-        # Menjadikan user sebagai Admin
         net localgroup administrators $user /add
         
-        # Simpan info ke environment variable agar bisa dibaca step berikutnya
         echo "USER_NAME=$user" >> $env:GITHUB_ENV
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
@@ -61,7 +60,7 @@ jobs:
         Write-Host "Username   : $env:USER_NAME"
         Write-Host "Password   : $env:USER_PASS"
         Write-Host "============================================="
-        Write-Host "PENTING: Gunakan username & password di atas!"
+        Write-Host "PENTING: Gunakan password baru di atas!"
 
     - name: Jangan Matikan (Loop)
       run: |
