@@ -1,4 +1,4 @@
-name: RDP Ngrok (Asia Pacific) Fix Final 2
+name: RDP Ngrok v3 Final (Fixed)
 
 on: workflow_dispatch
 
@@ -8,11 +8,14 @@ jobs:
     timeout-minutes: 9999
 
     steps:
-    - name: Download Ngrok & Konfigurasi
+    - name: Download Ngrok V3 & Konfigurasi
       run: |
-        Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+        # UPDATE: Menggunakan Link Download Ngrok V3 (Terbaru)
+        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip
-        .\ngrok\ngrok.exe authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        
+        # UPDATE: Command config untuk versi 3
+        .\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
     - name: Aktifkan RDP (Registry Fix)
       run: |
@@ -22,19 +25,17 @@ jobs:
 
     - name: Buat Tunnel Ngrok (Region AP - Singapore)
       run: |
+        # Menjalankan tunnel
         Start-Process -FilePath ".\ngrok\ngrok.exe" -ArgumentList "tcp --region ap 3389" -NoNewWindow
         Start-Sleep -Seconds 10
 
-    - name: Buat User & Password (FIXED)
+    - name: Buat User & Password
       run: |
-        # Password dipendekkan menjadi 12 karakter agar tidak muncul peringatan "Too Long"
-        # Password ini (KopiHitam@99) punya Huruf Besar, Kecil, Angka, & Simbol.
-        $password = "KopiHitam@99" 
+        $password = "KopiHitam@99"
         $user = "Skyro"
         
-        # /add /y memaksa 'yes' jika ada prompt konfirmasi lain
+        # Membuat user baru dengan password yang sudah lolos validasi
         net user $user $password /add /y
-        
         net localgroup administrators $user /add
         
         echo "USER_NAME=$user" >> $env:GITHUB_ENV
@@ -43,6 +44,7 @@ jobs:
     - name: Ambil Info Koneksi
       run: |
         try {
+            # Mengambil URL dari API local Ngrok
             $response = Invoke-RestMethod http://localhost:4040/api/tunnels
             $url = $response.tunnels[0].public_url
             $url = $url -replace "tcp://", ""
@@ -54,13 +56,12 @@ jobs:
     - name: 🚀 INFO LOGIN RDP
       run: |
         Write-Host "============================================="
-        Write-Host "       RDP SIAP (Server US - Route Asia)     "
+        Write-Host "       RDP SIAP (Ngrok V3 - Region AP)       "
         Write-Host "============================================="
         Write-Host "IP Address : $env:RDP_ADDRESS"
         Write-Host "Username   : $env:USER_NAME"
         Write-Host "Password   : $env:USER_PASS"
         Write-Host "============================================="
-        Write-Host "PENTING: Gunakan password baru di atas!"
 
     - name: Jangan Matikan (Loop)
       run: |
