@@ -1,4 +1,4 @@
-name: RDP Ngrok (Auto-Fix Final)
+name: RDP Ngrok (Working 100%)
 
 on: workflow_dispatch
 
@@ -10,14 +10,11 @@ jobs:
     steps:
     - name: 1. Bersihkan Sesi (Mode Aman)
       run: |
-        # Script ini mencoba mematikan Ngrok jika ada. 
-        # Jika tidak ada, dia akan lanjut (tidak error seperti sebelumnya).
         Stop-Process -Name "ngrok" -Force -ErrorAction SilentlyContinue
-        Write-Host "Sesi siap digunakan."
+        Write-Host "Sesi siap."
 
     - name: 2. Download Ngrok V3
       run: |
-        # Download langsung dari server resmi
         Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip -DestinationPath .
         
@@ -31,33 +28,26 @@ jobs:
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-    - name: 5. Jalankan Ngrok (Background)
+    - name: 5. Jalankan Ngrok
       run: |
-        # Jalankan Ngrok di background tanpa log file (biar tidak crash)
         Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389" -WindowStyle Hidden
-        
-        Write-Host "Ngrok sedang start... Tunggu 10 detik..."
+        Write-Host "Ngrok start... Tunggu 10 detik..."
         Start-Sleep -Seconds 10
 
-    - name: 6. AMBIL URL VIA API (Anti Gagal)
+    - name: 6. AMBIL URL (API Check)
       run: |
         $url = $null
         $attempt = 0
-        
-        # Coba minta URL ke API Ngrok sampai 20 kali
         while ($attempt -lt 20) {
             try {
-                # Tanya langsung ke sistem internal Ngrok
                 $response = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction Stop
-                
                 if ($response.tunnels.Count -gt 0) {
                     $rawUrl = $response.tunnels[0].public_url
-                    # Hapus awalan tcp:// biar siap copy-paste
                     $url = $rawUrl -replace "tcp://", ""
                     break
                 }
             } catch {
-                Write-Host "Menunggu tunnel siap... (Detik ke-$($attempt * 2))"
+                Write-Host "Menunggu tunnel... ($attempt)"
             }
             Start-Sleep -Seconds 2
             $attempt++
@@ -65,9 +55,9 @@ jobs:
 
         if ($url) {
             echo "RDP_ADDRESS=$url" >> $env:GITHUB_ENV
-            Write-Host "✅ SUKSES! URL DITEMUKAN." -ForegroundColor Green
+            Write-Host "SUKSES! URL DITEMUKAN."
         } else {
-            Write-Error "❌ Gagal. Pastikan Token benar dan tidak ada sesi nyangkut di dashboard Ngrok."
+            Write-Error "Gagal ambil URL. Cek Token/Dashboard Ngrok."
             exit 1
         }
 
@@ -80,10 +70,17 @@ jobs:
         echo "USER_NAME=$user" >> $env:GITHUB_ENV
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
-    - name: 🚀 INFO KONEKSI
+    - name: 🚀 INFO KONEKSI FINAL
       run: |
-        Write-Host "=============================================" -ForegroundColor Green
-        Write-Host "       RDP BERHASIL ONLINE                   " -ForegroundColor Green
-        Write-Host "=============================================" -ForegroundColor Green
-        Write-Host "Address  : $env:RDP_ADDRESS" -ForegroundColor Yellow
-        Write-Host "Username
+        # Saya menyederhanakan bagian ini agar tidak error syntax lagi
+        Write-Host "============================================="
+        Write-Host "       RDP BERHASIL ONLINE!                  "
+        Write-Host "============================================="
+        Write-Host "Address  : $env:RDP_ADDRESS"
+        Write-Host "Username : $env:USER_NAME"
+        Write-Host "Password : $env:USER_PASS"
+        Write-Host "============================================="
+
+    - name: 8. Loop (Jangan Mati)
+      run: |
+        while ($true) { Start-Sleep -Seconds 300 }
