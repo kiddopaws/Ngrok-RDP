@@ -1,4 +1,4 @@
-name: RDP Ngrok V3 (DEBUG MODE)
+name: RDP Ngrok V3 (DEBUG MODE FIX)
 
 on: workflow_dispatch
 
@@ -20,10 +20,10 @@ jobs:
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-    - name: Buat Tunnel Ngrok (Log Output)
+    - name: Buat Tunnel Ngrok (Log Terpisah)
       run: |
-        # Kita simpan output Ngrok ke file 'ngrok.log' agar bisa dibaca jika error
-        Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp", "3389" -RedirectStandardOutput "ngrok.log" -RedirectStandardError "ngrok.log" -NoNewWindow
+        # FIX: Memisahkan file output dan error agar tidak crash
+        Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp", "3389" -RedirectStandardOutput "ngrok_out.log" -RedirectStandardError "ngrok_err.log" -NoNewWindow
         
         Write-Host "Ngrok sedang berjalan... Tunggu 15 detik..."
         Start-Sleep -Seconds 15
@@ -42,13 +42,15 @@ jobs:
         } catch {
             # JIKA GAGAL, TAMPILKAN ISI LOG NGROK
             Write-Error "GAGAL: Ngrok mati atau menolak koneksi. Lihat alasannya di bawah ini:"
-            Write-Host "================ ISI LOG NGROK ================"
-            if (Test-Path ngrok.log) {
-                Get-Content ngrok.log
-            } else {
-                Write-Host "File log tidak ditemukan."
-            }
-            Write-Host "==============================================="
+            
+            Write-Host "========== LOG ERROR (PENTING) =========="
+            if (Test-Path ngrok_err.log) { Get-Content ngrok_err.log }
+            Write-Host "========================================="
+            
+            Write-Host "========== LOG OUTPUT =========="
+            if (Test-Path ngrok_out.log) { Get-Content ngrok_out.log }
+            Write-Host "================================"
+            
             exit 1
         }
 
