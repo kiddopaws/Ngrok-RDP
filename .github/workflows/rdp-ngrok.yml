@@ -1,4 +1,4 @@
-name: RDP Bore (Tanpa Token - Lebih Stabil)
+name: RDP Pinggy (Anti-Blokir)
 
 on: workflow_dispatch
 
@@ -8,18 +8,6 @@ jobs:
     timeout-minutes: 9999
 
     steps:
-    - name: Download & Install Bore
-      run: |
-        # Download Bore (Alternatif Ngrok tanpa akun)
-        Invoke-WebRequest https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -OutFile bore.zip
-        Expand-Archive bore.zip -DestinationPath .
-        
-        # Validasi
-        if (-not (Test-Path "bore.exe")) {
-            Write-Error "Gagal download bore.exe"
-            exit 1
-        }
-
     - name: Aktifkan RDP
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -34,42 +22,14 @@ jobs:
         net localgroup administrators $user /add
         echo "USER_PASS=$password" >> $env:GITHUB_ENV
 
-    - name: Jalankan Tunnel (Bore)
+    - name: 🚀 JALANKAN TUNNEL (Tunggu Link Muncul)
       run: |
-        # Jalankan bore dan simpan output ke log untuk diambil port-nya
-        Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -RedirectStandardOutput "bore.log" -NoNewWindow
+        Write-Host "Sedang meminta link public dari Pinggy..."
         
-        Write-Host "Sedang menyambungkan ke server Bore..."
-        Start-Sleep -Seconds 10
+        # Menggunakan SSH Tunneling ke Pinggy (Mode TCP)
+        # Output akan langsung muncul di log
+        ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@a.pinggy.io 
 
-    - name: 🚀 AMBIL INFO KONEKSI
-      run: |
-        if (Test-Path bore.log) {
-            # Ambil output log
-            $logContent = Get-Content bore.log
-            
-            # Cari baris yang berisi port (Contoh: "listening at bore.pub:12345")
-            $match = $logContent | Select-String "listening at bore.pub:[0-9]+"
-            
-            if ($match) {
-                # Bersihkan teks agar cuma sisa addressnya
-                $address = $match.Matches.Value.Replace("listening at ", "")
-                
-                Write-Host "============================================="
-                Write-Host "       RDP SIAP (Metode Bore - Tanpa Akun)   "
-                Write-Host "============================================="
-                Write-Host "Address  : $address"
-                Write-Host "Username : Skyro"
-                Write-Host "Password : $env:USER_PASS"
-                Write-Host "============================================="
-            } else {
-                Write-Error "Gagal mendapatkan port. Cek log di bawah:"
-                Get-Content bore.log
-            }
-        } else {
-            Write-Error "Bore gagal dijalankan."
-        }
-
-    - name: Loop (Jangan Mati)
+    - name: Loop
       run: |
         while ($true) { Start-Sleep -Seconds 300 }
